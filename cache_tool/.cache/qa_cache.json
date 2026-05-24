@@ -1,66 +1,30 @@
 [
   {
-    "question": "王夫之的气一元论是什么意思？",
-    "answer": "根据目前从图数据库中检索到的记录，王夫之（字逸生，又字修侯，号微君）确与“气一元论”这一概念/流派存在关联，但图谱中该关系上既无详细原文摘抄（detail 字段），王夫之节点及“气一元论”节点上也未提供任何解释或描述（description 字段均为空）。因此，仅凭现有数据，无法援引王夫之本人的言论或后世对其“气一元论”的阐释内容来具体说明其含义。\n\n在湖湘学术源流的研究中，王夫之的“气一元论”本是极其精深的思想，但当前的图谱记录暂缺此处的详细记载，我无法为您展开论述。若后续能补充相关史料原文，当可再作深入解读。",
-    "cypher": "MATCH (a:`人物`) WHERE a.name CONTAINS \"王夫之\"\nOPTIONAL MATCH (b) WHERE b.name CONTAINS \"气一元论\"\nRETURN a.name AS a_name, labels(a)[0] AS a_type, a.description AS a_description,\n       null AS relation, null AS detail,\n       b.name AS b_name, labels(b)[0] AS b_type, b.description AS b_description\nLIMIT 50",
+    "question": "王夫之的‘气一元论’是什么意思",
+    "answer": "根据目前检索到的湖湘文化图谱记载，王夫之的“气一元论”核心意涵可直接从相关论述中得出。王夫之明确主张“气是唯一实体，不是‘心外无物’”，从而将“气”确立为宇宙万物的根本。在此基础上，他进一步指出，“天地间存在着的一切都是具体的实物，一般原理存在于具体事物之中，决不可说具体事物依存于一般原理”。这一见解否定了抽象原理先于或独立于具体事物存在的观念，强调理在气中、道不离器，构成了王夫之“气一元论”的基本哲学立场。",
+    "cypher": "MATCH (a:`人物`) WHERE a.name CONTAINS '王夫之'\nOPTIONAL MATCH (b) WHERE b.name CONTAINS '气一元论'\nOPTIONAL MATCH (a)-[r]-(b)\nRETURN a.name AS a_name, labels(a)[0] AS a_type,\n       a.description AS a_description,\n       type(r) AS relation,\n       r.detail AS detail,\n       b.name AS b_name, labels(b)[0] AS b_type,\n       b.description AS b_description\nLIMIT 50",
     "evidence": [
       {
         "a_name": "王夫之",
         "a_type": "人物",
-        "a_description": "字逸生，又字修侯，号微君。",
-        "relation": null,
-        "detail": null,
+        "a_description": "为了事业和理想，从来不为利禄所诱，不受权势所压，就是历尽千辛万苦，也矢志不渝。明朝灭亡后，在家乡衡阳抗击清兵，失败后，隐居石船山，从事思想方面的著述。晚年身体不好，生活又贫困，写作时连纸笔都要靠朋友周济。每日著述，以至腕不胜砚，指不胜笔。在71岁时，清廷官员来拜访这位大学者，想赠送些吃穿用品。王夫之虽在病中，但认为自己是明朝遗臣，拒不接见清廷官员，也不接受礼物，并写了一副对联，以表自己的情操：清风有意难留我，明月无心自照人。",
+        "relation": "论述",
+        "detail": "王夫之认为气是唯一实体，不是“心外无物”。天地间存在着的一切都是具体的实物，一般原理存在于具体事物之中，决不可说具体事物依存于一般原理。",
         "b_name": "气一元论",
         "b_type": "概念/流派",
-        "b_description": ""
-      }
-    ],
-    "timestamp": 1779599707.8659973
-  },
-  {
-    "question": "王夫之和曾国藩",
-    "answer": "根据现有的图谱记录，关于王夫之与曾国藩的关系，仅存有一条明确的评价记载。曾国藩曾对王夫之的生平志趣与学术地位做出过一段极为深沉而全面的论述。\n\n在这段评价中，曾国藩首先描绘了王夫之隐居著述、不求闻达的形象：“独先生深閟固藏，追焉无与。平生痛诋党人标谤之习，不欲身隐而文著，来反唇之讪笑。用是，其身长邀，其名寂寂，其学亦竟不显于世。”他指出，王夫之痛恨明末党争中互相标榜的习气，因此甘愿长久隐遁，不求文名显赫，宁愿其学不显于世，也要避免招来讥讽。\n\n接着，曾国藩精要地概括了王夫之学术思想的核心追求与坚韧精神：“荒山敝榻，终岁孜孜，以求所谓育物之仁，经邦之礼。穷探极论，千变而不离其宗；旷百世不见知，而无所于悔。”他赞叹王夫之在艰苦环境中，终身孜孜不倦地探求那些化育万物之“仁”与经世治国之“礼”，其探索虽千变万化却始终不离根本，即便百世无人理解也毫无悔意。\n\n尤为关键的是，曾国藩高度肯定了王夫之学术的超前性。他列举后世涌现的巨儒，或攻良知之学，或辨《易图》真伪，或详考名物训诂仪礼，并指出这些被时人称为“卓绝”的成就，其实王夫之早已先发其声：“先生没后，巨儒迭兴，或攻良知捷获之说，或辨易图之凿，或详考名物、训诂、音韵，正《诗集传》之疏，或修补三礼时享之仪，号为卓绝。先生皆已发之于前，与后贤若合符契。”\n\n最终，曾国藩给出了一个总结性的论定。他认为，尽管王夫之的著作繁多，精醇与驳杂之处并存，但其人其学，终究可以称得上是“博文约礼，命世独立之君子已”。\n\n这段详尽的引文，即是当前图谱中关于王夫之与曾国藩之间关系的全部直接记录。",
-    "cypher": "MATCH path = (a:`人物`)-[rels*1..2]-(b:`人物`) \nWHERE a.name CONTAINS \"王夫之\" \n  AND b.name CONTAINS \"曾国藩\" \n  AND a <> b\nUNWIND rels AS r\nRETURN startNode(r).name AS a_name, labels(startNode(r))[0] AS a_type,\n       startNode(r).description AS a_description,\n       type(r) AS relation,\n       r.detail AS detail,\n       endNode(r).name AS b_name, labels(endNode(r))[0] AS b_type,\n       endNode(r).description AS b_description\nLIMIT 50",
-    "evidence": [
-      {
-        "a_name": "曾国藩",
-        "a_type": "人物",
-        "a_description": "",
-        "relation": "评价",
-        "detail": "独先生深閟固藏，追焉无与。平生痛诋党人标谤之习，不欲身隐而文著，来反唇之讪笑。用是，其身长邀，其名寂寂，其学亦竟不显于世。荒山敝榻，终岁孜孜，以求所谓育物之仁，经邦之礼。穷探极论，千变而不离其宗；旷百世不见知，而无所于悔。先生没后，巨儒迭兴，或攻良知捷获之说，或辨易图之凿，或详考名物、训诂、音韵，正《诗集传》之疏，或修补三礼时享之仪，号为卓绝。先生皆已发之于前，与后贤若合符契。虽其著述大繁，醇驳互见，然固可谓博文约礼，命世独立之君子已。",
-        "b_name": "王夫之",
-        "b_type": "人物",
-        "b_description": ""
-      }
-    ],
-    "timestamp": 1779607892.3643742
-  },
-  {
-    "question": "王夫之的‘气一元论’是什么意思？",
-    "answer": "根据目前从图谱数据库检索到的记录，关于王夫之的“气一元论”，仅包含以下两条关联信息：\n\n- **王夫之** 与 **气一元论** 之间存在 **“持有”** 关系。  \n- **王夫之** 与 **气一元论** 之间存在 **“提出”** 关系。\n\n这两条记录的详细描述字段（detail）与节点背景说明字段（description）均为空。因此，图谱中确认了王夫之提出并持有“气一元论”这一事实，但**并未收录该学说的具体内涵、义理阐述或相关原文**。  \n\n根据当前的图谱记录，暂无“气一元论”具体含义的详细记载。若需深入解释，恐怕需要补充更丰富的文献链接与思想释义数据。",
-    "cypher": "MATCH (b) WHERE b.name CONTAINS \"气一元论\"\nOPTIONAL MATCH (a:`人物`)-[r]-(b) WHERE a.name CONTAINS \"王夫之\"\nRETURN a.name AS a_name, labels(a)[0] AS a_type,\n       a.description AS a_description,\n       type(r) AS relation,\n       r.detail AS detail,\n       b.name AS b_name, labels(b)[0] AS b_type,\n       b.description AS b_description\nLIMIT 50",
-    "evidence": [
-      {
-        "a_name": "王夫之",
-        "a_type": "人物",
-        "a_description": "",
-        "relation": "持有",
-        "detail": "",
-        "b_name": "气一元论",
-        "b_type": "概念/流派",
-        "b_description": ""
+        "b_description": "王夫之认为气是唯一实体，不是“心外无物”。王夫之还指出，天地间存在着的一切都是具体的实物，一般原理存在于具体事物之中，决不可说具体事物依存于一般原理。"
       },
       {
         "a_name": "王夫之",
         "a_type": "人物",
-        "a_description": "",
+        "a_description": "为了事业和理想，从来不为利禄所诱，不受权势所压，就是历尽千辛万苦，也矢志不渝。明朝灭亡后，在家乡衡阳抗击清兵，失败后，隐居石船山，从事思想方面的著述。晚年身体不好，生活又贫困，写作时连纸笔都要靠朋友周济。每日著述，以至腕不胜砚，指不胜笔。在71岁时，清廷官员来拜访这位大学者，想赠送些吃穿用品。王夫之虽在病中，但认为自己是明朝遗臣，拒不接见清廷官员，也不接受礼物，并写了一副对联，以表自己的情操：清风有意难留我，明月无心自照人。",
         "relation": "提出",
         "detail": "",
         "b_name": "气一元论",
         "b_type": "概念/流派",
-        "b_description": ""
+        "b_description": "王夫之认为气是唯一实体，不是“心外无物”。王夫之还指出，天地间存在着的一切都是具体的实物，一般原理存在于具体事物之中，决不可说具体事物依存于一般原理。"
       }
     ],
-    "timestamp": 1779608018.0562456
+    "timestamp": 1779615971.7952337
   }
 ]

@@ -35,40 +35,43 @@ class HuxiangGraph:
 
             # 3. 开启数据库事务
             with self.driver.session() as session:
-                # 写入节点 (这部分不变)
                 # 写入节点
                 for entity in entities:
                     name = entity.get("name")
                     entity_type = entity.get("type", "未知实体")
-                    # 👇 1. 确保安全取出 description
                     desc_text = entity.get("description", "")
 
-                    # 👇 2. Cypher 语句中必须有 SET n.description
+                    # 修复：将 length() 改为 size()
                     cypher_node = f"""
                                     MERGE (n:`{entity_type}` {{name: $name}})
-                                    SET n.description = $description
+                                    ON CREATE SET n.description = $description
+                                    ON MATCH SET n.description = CASE
+                                        WHEN $description <> "" AND (n.description IS NULL OR size($description) > size(n.description))
+                                        THEN $description
+                                        ELSE n.description
+                                    END
                                     """
-                    # 👇 3. 极其关键：session.run 里必须传入 description=desc_text！
                     session.run(cypher_node, name=name, description=desc_text)
 
-                # 写入关系 (画线) —— 👈 核心升级区
+                # 写入关系
                 for rel in relationships:
                     source = rel.get("source")
                     target = rel.get("target")
                     relation_type = rel.get("relation", "关联").replace(" ", "_")
-
-                    # 1. 安全提取：把大模型辛苦抄下来的原话拿出来，如果没有就给个空字符串
                     detail_text = rel.get("detail", "")
 
-                    # 2. Cypher 升级：利用 SET 语法，把 detail 属性挂载到关系(r)上
+                    # 修复：将 length() 改为 size()
                     cypher_edge = f"""
-                    MATCH (a {{name: $source}})
-                    MATCH (b {{name: $target}})
-                    MERGE (a)-[r:`{relation_type}`]->(b)
-                    SET r.detail = $detail
-                    """
-
-                    # 3. 注入变量：连同 source、target 一起，把 detail_text 喂给数据库
+                                    MATCH (a {{name: $source}})
+                                    MATCH (b {{name: $target}})
+                                    MERGE (a)-[r:`{relation_type}`]->(b)
+                                    ON CREATE SET r.detail = $detail
+                                    ON MATCH SET r.detail = CASE
+                                        WHEN $detail <> "" AND (r.detail IS NULL OR size($detail) > size(r.detail))
+                                        THEN $detail
+                                        ELSE r.detail
+                                    END
+                                    """
                     session.run(cypher_edge, source=source, target=target, detail=detail_text)
 
             # 确保这个 return 与 with 语句同级对齐
