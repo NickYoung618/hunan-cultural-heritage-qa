@@ -1,0 +1,9 @@
+1.查看正在运行的容器： docker ps
+2.docker ps -a 查看所有容器
+3.docker start/stop 容器名或者编号前三位
+4.docker logs 查看内部日志
+5.docker stats 实时监控性能
+netstat -nao | findstr :7860
+taskkill /PID 35784 /F
+
+
