@@ -338,28 +338,37 @@ def build_evidence_graph(evidence: list[dict]) -> go.Figure | None:
         if not isinstance(record, dict):
             continue
 
-        a = record.get("a")
-        r = record.get("r")
-        b = record.get("b")
+        # 👇 核心修复：精准识别新版 Cypher 的扁平化返回结构
+        if "a_name" in record and "b_name" in record:
+            a_info = {
+                "name": record.get("a_name") or "未知",
+                "type": record.get("a_type") or "未知"
+            }
+            b_info = {
+                "name": record.get("b_name") or "未知",
+                "type": record.get("b_type") or "未知"
+            }
+            rel_label = record.get("relation") or "关联"
 
-        if a is None or b is None:
-            keys = list(record.keys())
-            if len(keys) >= 3:
-                a = record[keys[0]]
-                b = record[keys[-1]]
-                r = record[keys[1]] if len(keys) > 2 else None
-            elif len(keys) == 2:
-                a, b = record[keys[0]], record[keys[1]]
-                r = None
-            else:
-                continue
+        # 兼容旧版的 (a, r, b) 节点对象返回结构
+        elif "a" in record and "b" in record:
+            a = record.get("a")
+            r = record.get("r")
+            b = record.get("b")
+            a_info = _extract_node_info(a)
+            b_info = _extract_node_info(b)
+            rel_label = _extract_rel_info(r) if r else "关联"
 
-        a_info = _extract_node_info(a)
-        b_info = _extract_node_info(b)
-        rel_label = _extract_rel_info(r) if r else "关联"
+        else:
+            continue  # 结构不匹配则跳过
 
+        # 获取节点名字
         node_a_id = a_info["name"]
         node_b_id = b_info["name"]
+
+        # 排除把长文本误认为节点名（加上安全锁）
+        if len(node_a_id) > 20 or len(node_b_id) > 20:
+            continue
 
         node_set[node_a_id] = a_info
         node_set[node_b_id] = b_info
@@ -367,6 +376,8 @@ def build_evidence_graph(evidence: list[dict]) -> go.Figure | None:
 
     if not G.nodes:
         return None
+
+    # ... 下面保留原有的 pos = nx.spring_layout 绘图代码不变 ...
 
     pos = nx.spring_layout(G, k=2.5, iterations=50, seed=42)
 
