@@ -68,6 +68,10 @@ body, .gradio-container {
     border-radius: 0 !important;
     border: none !important;
     background: transparent !important;
+    min-height: 480px !important;
+    overflow-y: auto !important;
+    position: relative !important;
+    z-index: 1 !important;
 }
 .chatbot-container > div {
     background: transparent !important;
@@ -245,6 +249,14 @@ body, .gradio-container {
     margin-bottom: 4px;
 }
 
+/* ===== 防止右面板覆盖左面板 ===== */
+.gradio-container .gr-row {
+    overflow: visible !important;
+}
+.gradio-container .gr-column {
+    overflow: visible !important;
+}
+
 .footer-note {
     color: #5f6368;
     font-size: 0.72em;
@@ -347,6 +359,18 @@ def build_evidence_graph(evidence: list[dict]) -> go.Figure | None:
             b_info = {
                 "name": record.get("b_name") or "未知",
                 "type": record.get("b_type") or "未知"
+            }
+            rel_label = record.get("relation") or "关联"
+
+        # 兼容 source/target 格式（GraphRetriever 返回）
+        elif "source" in record and "target" in record:
+            a_info = {
+                "name": record.get("source") or "未知",
+                "type": record.get("source_type") or "未知"
+            }
+            b_info = {
+                "name": record.get("target") or "未知",
+                "type": record.get("target_type") or "未知"
             }
             rel_label = record.get("relation") or "关联"
 

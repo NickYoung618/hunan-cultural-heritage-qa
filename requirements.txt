@@ -24,5 +24,11 @@ plotly>=5.0
 # --- CLI 美化 ---
 rich>=13.0.0
 
+# --- 向量数据库 ---
+chromadb>=0.4.0
+
+# --- 网络检索 ---
+tavily-python>=0.3.0
+
 # --- 环境管理 ---
 python-dotenv>=1.0.0

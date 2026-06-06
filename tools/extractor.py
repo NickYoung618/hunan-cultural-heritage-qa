@@ -88,11 +88,11 @@ class HuxiangExtractor:
 
     def __init__(self) -> None:
         self.client = OpenAI(
-            api_key=os.getenv("DEEPSEEK_API_KEY"),
-            base_url=os.getenv("DEEPSEEK_BASE_URL"),
+            api_key=os.getenv("MIMO_API_KEY") or os.getenv("DEEPSEEK_API_KEY"),
+            base_url=os.getenv("MIMO_BASE_URL") or os.getenv("DEEPSEEK_BASE_URL"),
             timeout=300.0,
         )
-        self.model_name: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+        self.model_name: str = os.getenv("MIMO_MODEL") or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
     def extract(self, text: str, max_retries: int = 2) -> GraphExtractionResult:
         """从文本中抽取实体和关系，带重试与 Pydantic 校验。

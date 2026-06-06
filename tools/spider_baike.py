@@ -1,85 +1,48 @@
 """
-百度百科批量爬虫 v2.0：支持传入名单列表，自动爬取、清洗并归档。
+百科批量爬虫 v3.0：多源降级策略（维基百科 -> 百度搜索摘要 -> 百度百科）。
 输出路径：data/raw_html/（原始网页）、data/clean_txt/（纯净文本）
 """
 import re
+import sys
 import time
+import random
 import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
 from urllib.parse import quote
+
+# Windows 控制台 UTF-8 输出
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # --- 配置 ---
 ROOT_DIR = Path(__file__).resolve().parent.parent
 RAW_HTML_DIR = ROOT_DIR / "data" / "raw_html"
 CLEAN_TXT_DIR = ROOT_DIR / "data" / "clean_txt"
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/125.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-}
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+]
 
+WIKI_API = "https://zh.wikipedia.org/w/api.php"
 BAIKE_BASE = "https://baike.baidu.com/item/"
+BAIDU_SEARCH = "https://www.baidu.com/s"
 
 
-def build_url(name: str) -> str:
-    """根据中文名构建百度百科 URL。"""
-    return BAIKE_BASE + quote(name)
-
-
-def fetch_html(url: str) -> str:
-    """发起 GET 请求，返回 HTML 文本。"""
-    resp = requests.get(url, headers=HEADERS, timeout=20)
-    resp.encoding = "utf-8"
-    resp.raise_for_status()
-    return resp.text
-
-
-def extract_paragraphs(html: str) -> list[str]:
-    """从百度百科页面中提取正文段落。"""
-    soup = BeautifulSoup(html, "lxml")
-
-    # 移除上标、引用、脚注标签
-    for tag in soup.find_all(["sup", "span", "a"]):
-        classes = tag.get("class") or []
-        cls = " ".join(classes)
-        if tag.name == "sup" or any(kw in cls for kw in ("sup", "reference", "footnote")):
-            tag.decompose()
-
-    paragraphs: list[str] = []
-    seen: set[str] = set()
-
-    selectors = [
-        ".lemma-summary .para",
-        ".lemma-summary",
-        ".para",
-        ".para_Markdown",
-        ".lemma-content .para",
-        "[class*='para']",
-    ]
-
-    for selector in selectors:
-        for tag in soup.select(selector):
-            text = tag.get_text(separator="\n", strip=True)
-            if text and text not in seen:
-                seen.add(text)
-                paragraphs.append(text)
-
-    # 回退策略：提取所有可见文本块
-    if not paragraphs:
-        for tag in soup.find_all(["p", "div"]):
-            if tag.name == "div" and "para" not in " ".join(tag.get("class", [])):
-                continue
-            text = tag.get_text(separator="\n", strip=True)
-            if text and len(text) > 30:
-                paragraphs.append(text)
-
-    return paragraphs
+def get_session() -> requests.Session:
+    """创建带反爬配置的 Session。"""
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+    })
+    return s
 
 
 def clean_text(text: str) -> str:
@@ -92,121 +55,289 @@ def clean_text(text: str) -> str:
     text = text.replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
-    text = text.strip()
-    return text
+    return text.strip()
 
 
-def crawl_single(name: str, delay: float = 1.0) -> dict:
-    """抓取单个词条，保存原始 HTML 和清洗后的纯文本。
+# ============================================================
+# 数据源 1：维基百科中文版
+# ============================================================
 
-    Args:
-        name: 百度百科词条名称（中文）。
-        delay: 请求间隔（秒），避免触发反爬。
+def fetch_wikipedia(session: requests.Session, name: str) -> str | None:
+    """通过维基百科 API 获取词条摘要。"""
+    # 先搜索匹配的页面标题
+    search_params = {
+        "action": "query",
+        "list": "search",
+        "srsearch": name,
+        "srlimit": "3",
+        "format": "json",
+        "utf8": "1",
+    }
+    try:
+        resp = session.get(WIKI_API, params=search_params, timeout=15)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        results = data.get("query", {}).get("search", [])
+        if not results:
+            return None
 
-    Returns:
-        {"name": str, "status": "success"|"failed", "paragraphs": int, "error": str|None}
-    """
-    result: dict = {"name": name, "status": "failed", "paragraphs": 0, "error": None}
-    url = build_url(name)
+        # 找到最匹配的标题
+        title = None
+        for r in results:
+            if name in r["title"]:
+                title = r["title"]
+                break
+        if not title:
+            title = results[0]["title"]
+
+        # 获取摘要
+        summary_params = {
+            "action": "query",
+            "titles": title,
+            "prop": "extracts",
+            "exintro": "true",
+            "explaintext": "true",
+            "exsectionformat": "plain",
+            "format": "json",
+            "utf8": "1",
+        }
+        resp = session.get(WIKI_API, params=summary_params, timeout=15)
+        if resp.status_code != 200:
+            return None
+        pages = resp.json().get("query", {}).get("pages", {})
+        for page_id, page_data in pages.items():
+            extract = page_data.get("extract", "")
+            if extract and len(extract) > 50:
+                return extract
+    except Exception as e:
+        print(f"    [wiki] 异常: {e}")
+    return None
+
+
+def fetch_wikipedia_full(session: requests.Session, name: str) -> str | None:
+    """通过维基百科 API 获取词条完整正文。"""
+    search_params = {
+        "action": "query",
+        "list": "search",
+        "srsearch": name,
+        "srlimit": "3",
+        "format": "json",
+        "utf8": "1",
+    }
+    try:
+        resp = session.get(WIKI_API, params=search_params, timeout=15)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        results = data.get("query", {}).get("search", [])
+        if not results:
+            return None
+
+        title = None
+        for r in results:
+            if name in r["title"]:
+                title = r["title"]
+                break
+        if not title:
+            title = results[0]["title"]
+
+        # 获取完整正文
+        params = {
+            "action": "query",
+            "titles": title,
+            "prop": "extracts",
+            "explaintext": "true",
+            "exsectionformat": "plain",
+            "format": "json",
+            "utf8": "1",
+        }
+        resp = session.get(WIKI_API, params=params, timeout=15)
+        if resp.status_code != 200:
+            return None
+        pages = resp.json().get("query", {}).get("pages", {})
+        for page_id, page_data in pages.items():
+            extract = page_data.get("extract", "")
+            if extract and len(extract) > 100:
+                return extract
+    except Exception as e:
+        print(f"    [wiki-full] 异常: {e}")
+    return None
+
+
+# ============================================================
+# 数据源 2：百度搜索摘要
+# ============================================================
+
+def fetch_baidu_search(session: requests.Session, name: str) -> str | None:
+    """从百度搜索结果中提取摘要文本。"""
+    params = {"wd": name + " 百度百科", "rn": 5}
+    try:
+        time.sleep(random.uniform(1.0, 2.0))
+        resp = session.get(BAIDU_SEARCH, params=params, timeout=15, allow_redirects=True)
+        if resp.status_code != 200:
+            return None
+        soup = BeautifulSoup(resp.text, "lxml")
+
+        # 提取搜索结果摘要
+        abstracts = []
+        for item in soup.select(".c-abstract, .c-span-last, .result"):
+            text = item.get_text(strip=True)
+            if text and len(text) > 30:
+                abstracts.append(clean_text(text))
+
+        if abstracts:
+            return "\n\n".join(abstracts[:5])
+    except Exception as e:
+        print(f"    [baidu] 异常: {e}")
+    return None
+
+
+# ============================================================
+# 数据源 3：百度百科（降级尝试）
+# ============================================================
+
+def fetch_baike(session: requests.Session, name: str) -> str | None:
+    """尝试爬取百度百科页面。"""
+    url = BAIKE_BASE + quote(name)
+    try:
+        time.sleep(random.uniform(2.0, 4.0))
+        resp = session.get(url, timeout=15, allow_redirects=True)
+        if resp.status_code != 200:
+            return None
+        html = resp.text
+        if "百度安全验证" in html or "wappass.baidu.com" in html:
+            return None
+
+        soup = BeautifulSoup(html, "lxml")
+        for tag in soup.find_all(["sup"]):
+            tag.decompose()
+
+        paragraphs = []
+        seen = set()
+        for selector in [".lemma-summary .para", ".lemma-summary", ".para", ".para_Markdown"]:
+            for t in soup.select(selector):
+                text = t.get_text(separator="\n", strip=True)
+                if text and text not in seen:
+                    seen.add(text)
+                    paragraphs.append(clean_text(text))
+
+        if paragraphs:
+            return "\n\n".join(p for p in paragraphs if len(p) > 20)
+    except Exception as e:
+        print(f"    [baike] 异常: {e}")
+    return None
+
+
+# ============================================================
+# 主流程
+# ============================================================
+
+def crawl_single(session: requests.Session, name: str, delay: float = 2.0) -> dict:
+    """抓取单个词条，多源降级尝试。"""
+    result: dict = {"name": name, "status": "failed", "paragraphs": 0, "error": None, "source": None}
     safe_name = name.replace("/", "_").replace("\\", "_")
 
-    try:
-        print(f"  🌐 [{name}] 正在请求: {url}")
-        html = fetch_html(url)
-        print(f"  📥 [{name}] HTML 长度: {len(html)} 字符")
+    sources = [
+        ("wikipedia-full", fetch_wikipedia_full),
+        ("wikipedia", fetch_wikipedia),
+        ("baike", fetch_baike),
+        ("baidu-search", fetch_baidu_search),
+    ]
 
-        # 保存原始 HTML
-        RAW_HTML_DIR.mkdir(parents=True, exist_ok=True)
-        raw_path = RAW_HTML_DIR / f"{safe_name}.html"
-        raw_path.write_text(html, encoding="utf-8")
-        print(f"  💾 [{name}] 原始 HTML → {raw_path}")
+    content = None
+    used_source = None
 
-        # 提取并清洗段落
-        paragraphs = extract_paragraphs(html)
-        print(f"  📝 [{name}] 原始段落数: {len(paragraphs)}")
+    for source_name, fetcher in sources:
+        print(f"  [{source_name}] [{name}] 尝试中...")
+        text = fetcher(session, name)
+        if text and len(text) > 50:
+            content = text
+            used_source = source_name
+            print(f"  [{source_name}] [{name}] 成功! 长度: {len(text)} 字符")
+            break
+        else:
+            print(f"  [{source_name}] [{name}] 未获取到内容")
 
-        cleaned = []
-        for p in paragraphs:
-            p = clean_text(p)
-            if len(p) > 20:
-                cleaned.append(p)
-
-        # 保存清洗文本
-        CLEAN_TXT_DIR.mkdir(parents=True, exist_ok=True)
-        clean_path = CLEAN_TXT_DIR / f"{safe_name}.txt"
-        clean_path.write_text("\n\n".join(cleaned), encoding="utf-8")
-        print(f"  ✅ [{name}] 清洗文本 ({len(cleaned)} 段) → {clean_path}")
-
-        result["status"] = "success"
-        result["paragraphs"] = len(cleaned)
-
-    except requests.HTTPError as e:
-        result["error"] = f"HTTP {e.response.status_code if e.response else 'unknown'}"
-        print(f"  ❌ [{name}] HTTP 错误: {result['error']}")
-    except requests.RequestException as e:
-        result["error"] = f"网络错误: {e}"
-        print(f"  ❌ [{name}] 网络异常: {e}")
-    except Exception as e:
-        result["error"] = str(e)
-        print(f"  ❌ [{name}] 未知错误: {e}")
-
-    # 请求间隔，避免反爬
-    if delay > 0:
+    if not content:
+        result["error"] = "所有数据源均失败"
+        print(f"  [FAIL] [{name}] 所有数据源均失败")
         time.sleep(delay)
+        return result
 
+    # 清洗并保存
+    cleaned = clean_text(content)
+    if len(cleaned) < 20:
+        result["error"] = "内容过短"
+        print(f"  [FAIL] [{name}] 内容过短 ({len(cleaned)} 字)")
+        time.sleep(delay)
+        return result
+
+    # 保存原始内容
+    RAW_HTML_DIR.mkdir(parents=True, exist_ok=True)
+    raw_path = RAW_HTML_DIR / f"{safe_name}.txt"
+    raw_path.write_text(content, encoding="utf-8")
+
+    # 保存清洗文本
+    CLEAN_TXT_DIR.mkdir(parents=True, exist_ok=True)
+    clean_path = CLEAN_TXT_DIR / f"{safe_name}.txt"
+    clean_path.write_text(cleaned, encoding="utf-8")
+
+    # 统计段落数
+    para_count = len([p for p in cleaned.split("\n\n") if p.strip()])
+    print(f"  [OK] [{name}] {para_count} 段 ({used_source}) -> {clean_path}")
+
+    result["status"] = "success"
+    result["paragraphs"] = para_count
+    result["source"] = used_source
+
+    time.sleep(delay)
     return result
 
 
-def crawl_batch(names: list[str], delay: float = 1.5) -> list[dict]:
-    """批量抓取百度百科词条，返回汇总结果。
-
-    Args:
-        names: 词条名称列表，如 ["王夫之", "曾国藩", "周敦颐"]。
-        delay: 每个请求之间的间隔（秒）。
-
-    Returns:
-        每个词条的抓取结果汇总列表。
-    """
+def crawl_batch(names: list[str], delay: float = 2.0) -> list[dict]:
+    """批量抓取词条，返回汇总结果。"""
     print("=" * 60)
-    print(f"🕷️  百度百科批量爬虫启动 | 目标: {len(names)} 个词条")
-    print(f"📂 原始 HTML → {RAW_HTML_DIR}")
-    print(f"📂 清洗文本 → {CLEAN_TXT_DIR}")
+    print(f"百科批量爬虫启动 | 目标: {len(names)} 个词条")
+    print(f"原始内容 -> {RAW_HTML_DIR}")
+    print(f"清洗文本 -> {CLEAN_TXT_DIR}")
     print("=" * 60)
+
+    session = get_session()
 
     results: list[dict] = []
     for i, name in enumerate(names, 1):
         print(f"\n[{i}/{len(names)}] 开始处理: {name}")
-        result = crawl_single(name, delay=delay)
+        result = crawl_single(session, name, delay=delay)
         results.append(result)
 
     # 汇总
     success_count = sum(1 for r in results if r["status"] == "success")
     total_paragraphs = sum(r["paragraphs"] for r in results)
     print("\n" + "=" * 60)
-    print(f"🎉 批量抓取完成！成功: {success_count}/{len(names)}，共 {total_paragraphs} 段文本")
+    print(f"批量抓取完成! 成功: {success_count}/{len(names)}，共 {total_paragraphs} 段文本")
     print("=" * 60)
 
     for r in results:
-        icon = "✅" if r["status"] == "success" else "❌"
-        err = f" — {r['error']}" if r["error"] else ""
-        print(f"  {icon} {r['name']}: {r['paragraphs']} 段{err}")
+        icon = "[OK]" if r["status"] == "success" else "[FAIL]"
+        src = f" ({r['source']})" if r.get("source") else ""
+        err = f" -- {r['error']}" if r["error"] else ""
+        print(f"  {icon} {r['name']}: {r['paragraphs']} 段{src}{err}")
 
     return results
 
 
 def main(names: list[str] | None = None) -> None:
-    """主控函数：接受名单列表，自动完成抓取→清洗→归档全流程。
-
-    Args:
-        names: 词条名列表。若为 None，则使用默认的湖湘名人列表。
-    """
+    """主控函数。"""
     if names is None:
         names = ["王夫之", "王介之", "周敦颐", "曾国藩"]
-
     crawl_batch(names)
 
 
 if __name__ == "__main__":
-    # 默认名单：可直接修改此列表或通过 main() 传参调用
-    default_names = ["王夫之", "王介之", "周敦颐", "曾国藩"]
+    default_names = [
+        "王夫之", "周敦颐", "曾国藩", "左宗棠", "魏源",
+        "谭嗣同", "黄兴", "蔡锷", "毛泽东",
+        "岳麓书院", "湘军", "经世致用"
+    ]
     main(default_names)
