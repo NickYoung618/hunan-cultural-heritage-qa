@@ -214,6 +214,5 @@ python rag_agent.py  # 一键启动
 
 ---
 
-**汇报人**：[您的姓名]  
 **日期**：2026年6月  
 **技术栈**：MIMO API (mimo-v2.5-pro) + Neo4j + ChromaDB + LangGraph
